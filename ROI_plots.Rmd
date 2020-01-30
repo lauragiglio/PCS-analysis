@@ -41,6 +41,7 @@ ROIbetas$participant = as.factor(ROIbetas$participant)
 
 #tranform in long format
 ROI_betas = melt(ROIbetas, id.vars=c('participant'), variable.name='condition_ROI',value.name='betas')
+ROI_betas = ROI_betas[order(as.integer(ROI_betas$participant)),]
 
 ```
 
@@ -57,7 +58,7 @@ for (icond in 1:12) {
   mean_betas$condition[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "G_"))[2]
 }
 
-mean_betas$modality = ifelse(endsWith(as.character(mean_betas$condition),'P'),'Production','Comprehension')
+mean_betas$modality = ifelse(endsWith(as.character(mean_betas$condition_ROI),'P'),'Production','Comprehension')
 
 ## use SD & N to create error bars for standard error of the mean
 mean_betas$CIu <- mean_betas$meanBetas + (mean_betas$sdBetas/sqrt(mean_betas$N)) 
@@ -67,29 +68,53 @@ mean_betas$CId <- mean_betas$meanBetas - (mean_betas$sdBetas/sqrt(mean_betas$N))
 
 ROI_bar = ggplot(mean_betas, aes(x=condition, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
-  facet_grid(~as.factor(ROI))+
+  facet_grid(~ROI)+
   scale_y_continuous("Parameter Estimates")
-ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf')
+
 
 ROI_bar
+ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf')
+
 
 ```
 
+```{r stats, echo=FALSE}
+# first prepare data frame
+ROI_betas$modality = ifelse(endsWith(as.character(ROI_betas$condition_ROI),'P'),'Production','Comprehension')
+
+for (icond in 1:480) {
+  ROI_betas$structure[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[2]
+  ROI_betas$ROI[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[1]
+  #ROI_betas$condition[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "G_"))[2]
+}
+
+results = aov(betas ~ structure*modality*ROI, data = ROI_betas)
+summary(results)
+
+IFG_betas = data.frame()
+
+IFG_betas <- ROI_betas[ROI_betas$ROI == "IFG",]
+resultsIFG = aov(betas ~ structure*modality, data = IFG_betas)
+
+
+
+```
+
+
+
+Violin plot to check distributions. There seems to be one participant (26, 31 in acquisition) with really high values (mainly for MTG production)
 ```{r violin plot, echo=FALSE}
 
-p7 <- ggplot(ROI_betas,aes(x=Condition,y=Betas))+
+p7 <- ggplot(ROI_betas,aes(x=condition_ROI,y=betas, fill=condition_ROI))+
   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
   geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+
   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds. 
   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
-  ylab('Onset')+xlab('Condition')+theme_cowplot() +
-  ggtitle("Onset times per condition")
+  ylab('Betas')+xlab('Condition')+theme_cowplot()+
+  ggtitle("Parameter estimates per condition")
 
 p7
 ```
 
-```{r stats, echo=FALSE}
 
 
-```
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
