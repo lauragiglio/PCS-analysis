@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jul 31 14:33:50 2019
+
+@author: laugig
+"""
+import pandas as pd
+from pandas import DataFrame
+import os
+os.chdir('/project/3011226.01/bids/derivatives/')
+fmriprepdir = '/project/3011226.01/bids/derivatives/fmriprep/'
+firstleveldir = '/project/3011226.01/bids/derivatives/SPM/firstlevel/'
+
+# range 1-40, excluding 5, 23
+for s in range(46,47):
+    #convert to string    
+    subj = str(s).zfill(2)
+        
+    #Production
+    for n in range(1,9):
+        run = str(n)
+        if subj == '01' and n == 1 or subj == '10' and n == 1 or subj == '31' and n == 1:
+            df = pd.read_csv(f'{fmriprepdir}sub-0{subj}/ses-mri01/func/sub-0{subj}_ses-mri01_task-Production{run}_acq-epi_run-2_desc-confounds_regressors.tsv', sep="\t") 
+        else:            
+            df = pd.read_csv(f'{fmriprepdir}sub-0{subj}/ses-mri01/func/sub-0{subj}_ses-mri01_task-Production{run}_acq-epi_run-1_desc-confounds_regressors.tsv', sep="\t")
+        #esclude first 5 scans
+        df2 = df.iloc[5:210]
+        
+        allregs = list(df2.columns)
+        #find aroma regressors
+        aromacomp = [s for s in allregs if 'aroma' in s]
+        ## need to decide about cosine!! - define other regs or interest
+        confregs = ['dvars','framewise_displacement','a_comp_cor_00','a_comp_cor_01','a_comp_cor_02','a_comp_cor_03','a_comp_cor_04','a_comp_cor_05','trans_x','trans_y','trans_z', 'rot_x','rot_y','rot_z']
+        confoundregressors = confregs + aromacomp
+        # add defined regs to final regressors of interest
+        regressors = df2[confoundregressors]
+    
+        regressors.to_csv(f'{firstleveldir}sub-0{subj}/R{run}.txt', index=False,header=None, sep='\t')
+    
+    
+    # Comprehension
+    for n in range(1,5):
+        run = str(n)
+             
+        df = DataFrame.from_csv(f'{fmriprepdir}sub-0{subj}/ses-mri01/func/sub-0{subj}_ses-mri01_task-Comprehension{run}_acq-epi_run-1_desc-confounds_regressors.tsv', sep="\t")
+    
+        df2 = df.iloc[5:210]
+        
+        allregs = list(df2.columns)
+        #find aroma regressors
+        aromacomp = [s for s in allregs if 'aroma' in s]
+        ## need to decide about cosine!! - define other regs or interest
+        confregs = ['dvars','framewise_displacement','a_comp_cor_00','a_comp_cor_01','a_comp_cor_02','a_comp_cor_03','a_comp_cor_04','a_comp_cor_05','trans_x','trans_y','trans_z', 'rot_x','rot_y','rot_z']
+        confoundregressors = confregs + aromacomp
+        # add defined regs to final regressors of interest
+        regressors = df2[confoundregressors]
+            
+        regressors.to_csv(f'{firstleveldir}sub-0{subj}/RC{run}.txt', index=False,header=None, sep='\t')
+
+
