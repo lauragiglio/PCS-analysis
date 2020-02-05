@@ -1,41 +1,64 @@
 ---
-title: "ROI_analyses"
+title: "Region of interest analysis"
 author: "Laura Giglio"
 date: "January 15, 2020"
-output: html_document
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+# devtools::install_github("joerodd/mpinltheme")  ## devtools allows you to get R packages from github
+# install.packages("plotrix")
+# install.packages("reshape2")
+# install.packages("viridis")
+# install.packages("dichromat")
+# install.packages("cowplot")
+# install.packages("readr")
+# install.packages("ggplot2")
+# install.packages("plyr")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("kableExtra")
+
+
+#require(devtools)
+#install_version("caTools", version = "1.17", repos = "http://cran.us.r-project.org")
+
 library(ggplot2)
 library(plyr)
 library(dplyr)
 library(tidyverse)
 library(plotrix)
 library(reshape2)
+library(viridis)  ## viridis color palette
+library(mpinltheme)
+library(dichromat)
+library(kableExtra)
 rm(list=ls())
 #setwd("P:/3011226.01/behavioural/")
-packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
-              "readr", "caTools", "bitops")
+packages <- c("lavaan", "rmarkdown", 
+              "caTools", "bitops")
 if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
   install.packages(setdiff(packages, rownames(installed.packages())))  
 }
 library(cowplot)
-library(dplyr)
 library(readr)
 
-source("C:/Users/laugig/Documents/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
+#source("C:/Users/laugig/Documents/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
 #source("summarySE.R")
 #source("simulateData.R")
 ```
 
-## ROI plots
+Regions of interest are based on "syntactic" as keyword in Neurosynth (association test, threshold z-score = 9), with clusters in LIFG and LMTG (broad, from posterior to anterior). Average beta values per participant per ROI were extracted with MarsBar in SPM from the group-level results.
 
-Table includes averaged beta values per participant per ROI. msXX specifies condition in IFG. TmsXX condition in MTG. First number 1 is production, 2 is comprehension, Second 1 is NP, 2 SC, 3 SE
+![Alt text](Neurosynth-ROIs.png)
 
 ```{r import ROI data, echo = FALSE}
 
-ROIbetas = read.table("P:/3011226.01/bids/derivatives/SPM/ROI/ROIresults.csv", header = T, sep = ',')
+ROIbetas = read.table("/project/3011226.01/bids/derivatives/SPM/ROI/ROIresults.csv", header = T, sep = ',')
 
 ROIbetas$participant = as.factor(ROIbetas$participant)
 
@@ -45,17 +68,32 @@ ROI_betas = ROI_betas[order(as.integer(ROI_betas$participant)),]
 
 ```
 
-## Including Plots
+
+Here are mean and standard deviations per region per condition. 
+
+NP = word lists (springen, rennen, de jongen, het meisje).
+
+SC = coordinated sentences (de jongen rent, het meisje springt).
+
+SE = embedded sentence (de jongen denkt dat het meisje springt).
 
 
-```{r plots, echo=FALSE}
+P and C stand for Production and Comprehension.
+```{r descriptive stats, echo=FALSE}
 
 mean_betas <- ROI_betas %>% group_by(condition_ROI) %>% summarise(meanBetas = mean(betas),sdBetas = sd(betas),N=n())
+
+kable(mean_betas) %>% kable_styling()
+mean_betas$structure <- NA
+mean_betas$ROI <- NA
+mean_betas$condition <- NA
+mean_betas$condROI <- NA
 
 for (icond in 1:12) {
   mean_betas$structure[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "_"))[2]
   mean_betas$ROI[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "_"))[1]
   mean_betas$condition[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "G_"))[2]
+  mean_betas$condROI[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]),"_[CP]"))[1]
 }
 
 mean_betas$modality = ifelse(endsWith(as.character(mean_betas$condition_ROI),'P'),'Production','Comprehension')
@@ -64,57 +102,269 @@ mean_betas$modality = ifelse(endsWith(as.character(mean_betas$condition_ROI),'P'
 mean_betas$CIu <- mean_betas$meanBetas + (mean_betas$sdBetas/sqrt(mean_betas$N)) 
 mean_betas$CId <- mean_betas$meanBetas - (mean_betas$sdBetas/sqrt(mean_betas$N))
 
-
-
-ROI_bar = ggplot(mean_betas, aes(x=condition, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
-  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
-  facet_grid(~ROI)+
-  scale_y_continuous("Parameter Estimates")
-
-
-ROI_bar
-ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf')
-
-
 ```
 
+
+
+### ANOVA 
+Factors ROI (IFG,MTG), structure (NP,SC,SE) and modality (Comprehension, Production).
+
+ 
 ```{r stats, echo=FALSE}
 # first prepare data frame
 ROI_betas$modality = ifelse(endsWith(as.character(ROI_betas$condition_ROI),'P'),'Production','Comprehension')
 
+ROI_betas$structure <- NA
+ROI_betas$condition <- NA
+ROI_betas$ROI <- NA
+
 for (icond in 1:480) {
   ROI_betas$structure[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[2]
   ROI_betas$ROI[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[1]
-  #ROI_betas$condition[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "G_"))[2]
+  ROI_betas$condition[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "G_"))[2]
 }
+ROI_betas$structure = as.factor(ROI_betas$structure)
+ROI_betas$ROI = as.factor(ROI_betas$ROI)
+ROI_betas$modality = as.factor(ROI_betas$modality)
 
 results = aov(betas ~ structure*modality*ROI, data = ROI_betas)
+
 summary(results)
 
-IFG_betas = data.frame()
+#IFG_betas = data.frame()
 
-IFG_betas <- ROI_betas[ROI_betas$ROI == "IFG",]
-resultsIFG = aov(betas ~ structure*modality, data = IFG_betas)
+#IFG_betas <- ROI_betas[ROI_betas$ROI == "IFG",]
+#resultsIFG = aov(betas ~ structure*modality, data = IFG_betas)
 
 
+```
+There are significant main effects of structure, modality and ROI.
+
+There is increased activation with increasing constituent structure, overall more activation for production than comprehension and in MTG than IFG.
+
+There is also a significant interaction between structure and modality: there is a steeper increase in activation for constituent structure in production than in comprehension. 
+
+```{r str by mod, echo=FALSE}
+MEstructure = ggplot(mean_betas, aes(x=structure, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction structure - modality")
+
+MEstructure 
+```
+```{r plot by structure, echo=FALSE}
+ROI_structure = ggplot(mean_betas, aes(x=structure, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_wrap(~ROI+modality, ncol=6)+  theme_mpinl_general() + scale_fill_discrete_mpinl() +# scale_fill_viridis_d() +
+  scale_y_continuous("Parameter Estimates")
+
+ROI_structure
+```
+
+And there is a significant interaction between modality and ROI, due to the larger difference between comprehensio and production in IFG than in MTG.
+
+```{r mod by ROI, echo=FALSE}
+modROI = ggplot(mean_betas, aes(x=ROI, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates")+ theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction Modality - ROI")
+
+modROI
+```
+
+
+
+
+```{r plot by ROI, echo=FALSE}
+
+ROI_bar = ggplot(mean_betas, aes(x=modality, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_grid(~ROI+structure)+ theme_mpinl_general() + scale_fill_discrete_mpinl() +#scale_fill_viridis_d() +
+  scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=90, vjust = 0.5))
+
+ROI_bar
+#ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf')
+```
+
+
+```{r plot by modality, echo=FALSE}
+ROI_modality = ggplot(mean_betas, aes(x=structure, y=meanBetas,fill = structure)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_grid(~modality + ROI)+ theme_mpinl_general() + scale_fill_discrete_mpinl() +
+  scale_y_continuous("Parameter Estimates")
+
+ROI_modality
 
 ```
 
 
 
-Violin plot to check distributions. There seems to be one participant (26, 31 in acquisition) with really high values (mainly for MTG production)
-```{r violin plot, echo=FALSE}
+```{r plot by ROI with structure, echo=FALSE}
+ROI_ROI = ggplot(mean_betas, aes(x=ROI, y=meanBetas,fill = ROI)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_wrap(~structure+modality, ncol=6)+ theme_mpinl_general() + scale_fill_discrete_mpinl() +
+  scale_y_continuous("Parameter Estimates")
 
-p7 <- ggplot(ROI_betas,aes(x=condition_ROI,y=betas, fill=condition_ROI))+
-  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
-  geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+
-  #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds. 
-  #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
-  ylab('Betas')+xlab('Condition')+theme_cowplot()+
-  ggtitle("Parameter estimates per condition")
-
-p7
+ROI_ROI
 ```
 
 
+```{r general plot, echo=FALSE}
+ROI_ROI = ggplot(mean_betas, aes(x=condition_ROI, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  theme_mpinl_general() + scale_fill_discrete_mpinl() +
+  scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=45, vjust = 0.5))
 
+ROI_ROI
+```
+
+
+<!-- Violin plot to check distributions. There seems to be one participant (26, 31 in acquisition) with really high values (mainly for MTG production). -->
+
+<!-- ```{r violin plot, echo=FALSE} -->
+
+<!-- raincloud_results <- ggplot(ROI_betas,aes(x=structure,y=betas, fill=structure))+ -->
+<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
+<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant),show.legend=FALSE)+ -->
+<!--   facet_grid(~modality+ROI) + -->
+<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
+<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
+<!--   ylab('Betas')+xlab('Condition')+theme_cowplot()+ -->
+<!--   ggtitle("Parameter estimates per condition per ROI with individual datapoints") -->
+
+<!-- raincloud_results -->
+<!-- ``` -->
+
+## Anterior vs Posterior MTG
+Now let's inspect differences between anterior and posterior MTG (exploratory analysis).
+There are main effects of structure and ROI, but no main effect of modality. This is not surprising, since the difference between production and comprehension was reduced in MTG overall, and there was an interaction between modality and ROI in IFG-MTG. 
+There are no interactions. 
+Visually, it seems that pMTG behaves more similarly to IFG and aMTG slightly differently.
+
+![Alt text](aMTG-pMTG.png)
+
+```{r import MTG data, echo = FALSE}
+
+MTGbetas = read.table("/project/3011226.01/bids/derivatives/SPM/ROI/ant-postMTG/MTGresults.csv", header = T, sep = ',')
+
+MTGbetas$participant = as.factor(MTGbetas$participant)
+
+#tranform in long format
+MTGbetas = melt(MTGbetas, id.vars=c('participant'), variable.name='condition_ROI',value.name='betas')
+MTGbetas = MTGbetas[order(as.integer(MTGbetas$participant)),]
+
+```
+
+```{r descriptive stats MTG, echo=FALSE}
+
+mean_MTGbetas <- MTGbetas %>% group_by(condition_ROI) %>% summarise(meanBetas = mean(betas),sdBetas = sd(betas),N=n())
+
+kable(mean_MTGbetas) %>% kable_styling()
+mean_MTGbetas$structure <- NA
+mean_MTGbetas$ROI <- NA
+mean_MTGbetas$condition <- NA
+mean_MTGbetas$condROI <- NA
+
+for (icond in 1:12) {
+  mean_MTGbetas$structure[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "_"))[2]
+  mean_MTGbetas$ROI[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "_"))[1]
+  mean_MTGbetas$condition[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "G_"))[2]
+  mean_MTGbetas$condROI[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]),"_[CP]"))[1]
+}
+
+mean_MTGbetas$modality = ifelse(endsWith(as.character(mean_MTGbetas$condition_ROI),'P'),'Production','Comprehension')
+
+## use SD & N to create error bars for standard error of the mean
+mean_MTGbetas$CIu <- mean_MTGbetas$meanBetas + (mean_MTGbetas$sdBetas/sqrt(mean_MTGbetas$N)) 
+mean_MTGbetas$CId <- mean_MTGbetas$meanBetas - (mean_MTGbetas$sdBetas/sqrt(mean_MTGbetas$N))
+
+```
+### ANOVA 
+Factors ROI (IFG,MTG), structure (NP,SC,SE) and modality (Comprehension, Production).
+
+```{r stats MTG, echo=FALSE}
+# first prepare data frame
+MTGbetas$modality = ifelse(endsWith(as.character(MTGbetas$condition_ROI),'P'),'Production','Comprehension')
+
+MTGbetas$structure <- NA
+MTGbetas$condition <- NA
+MTGbetas$ROI <- NA
+
+for (icond in 1:480) {
+  MTGbetas$structure[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "_"))[2]
+  MTGbetas$ROI[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "_"))[1]
+  MTGbetas$condition[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "G_"))[2]
+}
+
+MTGbetas$modality = as.factor(MTGbetas$modality)
+MTGbetas$ROI = as.factor(MTGbetas$ROI)
+MTGbetas$structure = as.factor(MTGbetas$structure)
+
+MTGresults = aov(betas ~ structure*ROI + modality, data = MTGbetas)
+summary(MTGresults)
+
+
+```
+```{r str by mod MTG , echo=FALSE}
+MEstructure = ggplot(mean_MTGbetas, aes(x=structure, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl()
+  
+
+MEstructure
+```
+```{r plot by structure MTG , echo=FALSE}
+ROI_structure = ggplot(mean_MTGbetas, aes(x=structure, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_wrap(~ROI+modality, ncol=6)+ theme_mpinl_general() + scale_fill_discrete_mpinl()+ # scale_fill_viridis_d() + 
+  scale_y_continuous("Parameter Estimates")
+
+ROI_structure
+```
+```{r mod by ROI MTG, echo=FALSE}
+modROI = ggplot(mean_MTGbetas, aes(x=ROI, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl()
+
+modROI
+``` 
+
+```{r plot by ROI MTG, echo=FALSE}
+
+ROI_bar = ggplot(mean_MTGbetas, aes(x=modality, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_grid(~ROI+structure)+ theme_mpinl_general() + scale_fill_discrete_mpinl() + #scale_fill_viridis_d() +
+  scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=90, vjust = 0.5))
+
+ROI_bar
+#ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf')
+```
+
+```{r general plot MTG, echo=FALSE}
+ROI_ROI = ggplot(mean_MTGbetas, aes(x=condition_ROI, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  theme_mpinl_general() + scale_fill_discrete_mpinl() +
+  scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=45, vjust = 0.5))
+
+ROI_ROI
+```
+
+<!-- The participant's high betas are mainly in production and pMTG. -->
+
+<!-- ```{r violin plot MTG, echo=FALSE} -->
+
+<!-- raincloud_results <- ggplot(MTGbetas,aes(x=structure,y=betas, fill=structure))+ -->
+<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
+<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant),show.legend=FALSE)+ -->
+<!--   facet_grid(~modality+ROI) + -->
+<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
+<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
+<!--   ylab('Betas')+xlab('Condition')+theme_cowplot()+ -->
+<!--   ggtitle("Parameter estimates per condition per ROI with individual datapoints") -->
+
+<!-- raincloud_results -->
+<!-- ``` -->
