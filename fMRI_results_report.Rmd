@@ -1,0 +1,372 @@
+---
+title: "fMRI results"
+author: "Laura Giglio"
+date: "February 4, 2020"
+output:
+  pdf_document: 
+      fig_caption: yes
+  word_document: default
+always_allow_html: true
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#devtools::install_github("joerodd/mpinltheme")  ## devtools allows you to get R packages from github
+#install.packages("plotrix")
+#install.packages("reshape2")
+#install.packages("viridis")
+#install.packages("dichromat")
+#install.packages("cowplot")
+#install.packages("readr")
+#install.packages("plotrix")
+#require(devtools)
+#install_version("caTools", version = "1.17", repos = "http://cran.us.r-project.org")
+
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(plotrix)
+library(reshape2)
+library(viridis)  ## viridis color palette
+library(mpinltheme)
+library(dichromat)
+library(kableExtra)
+rm(list=ls())
+#setwd("P:/3011226.01/behavioural/")
+packages <- c("lavaan", "rmarkdown", 
+              "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+library(cowplot)
+library(readr)
+
+#source("C:/Users/laugig/Documents/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
+#source("summarySE.R")
+#source("simulateData.R")
+```
+
+## Whole-brain results
+We looked at 3 levels of constituent structure in production and comprehension.
+
+NP = word lists (springen, rennen, de jongen, het meisje).
+
+SC = coordinated sentences (de jongen rent, het meisje springt).
+
+SE = embedded sentence (de jongen denkt dat het meisje springt).
+
+GLM group-level analyses show that the increase in constituent structure engages mainly temporal, parietal and frontal areas in the left hemisphere that are normally associated with the language network.
+
+![Constituent structure effect across production and comprehension](GLMresults/MEStructure.png)
+
+\newpage
+The gradient in constituent structure engages mainly the LIFG and the left MTG both in production and comprehension, with more extensive clusters in production. (Red = production, blue = comprehension)
+
+![Constituent structure effect (NP<SC<SE) in production (red) and comprehension (blue)](GLMresults/Prod-CompGradient.png)
+
+
+
+
+There is an interaction between the effects of constituent structure and modality (see below). In red are regions more active for the constituent size effect in production, in blue for comprehension. The LIFG and a small cluster in the posterior MTG are more engaged for larger constituents in production than in comprehension. The right middle frontal gyrus and the supramarginal gyrus are more involved for larger constituents in comprehension than production.
+
+![Interaction between constituent structure effect and modality. Red: larger effect in production, blue: in comprehension](GLMresults/interactions.PNG)
+
+\newpage
+By looking at the difference between the two sentence conditions (i.e. coordinated sentences vs embedded sentences, SC<SE), a similar pattern to the constituent size gradient is observed, with again LIFG and LMTG, a parietal cluster and the right cerebellum. There is a lot of overlap (purple) between this contrast (blue) and the gradient contrast (red).
+
+![Sentence contrast (SC<SE, blue) and constituent structure contrast (NP<SC<SE, red)](GLMresults/SCSEcontrast.png)
+
+\newpage
+The same contrast in comprehension shows no supra-threshold clusters. The interaction between production and comprehension and the two sentence conditions shows one anterior cluster in LIFG.
+
+![Interaction between modality and sentence contrast](GLMresults/interactionSCSE.png)
+
+\newpage
+# ROI analysis: LIFG and LMTG
+
+As previously planned, we ran a region of interest analysis with predefined clusters, based on "syntactic" as keyword in Neurosynth (association test, threshold z-score = 9). From the neurosynth active voxels, we extracted two clusters in LIFG and LMTG (broad, from posterior to anterior). Average beta values per participant per ROI were extracted with MarsBar in SPM from the group-level results.
+
+![ROIs extracted from Neurosynth, Yellow = LIFG, Red = LMTG](Neurosynth-ROIs.png)
+
+```{r import ROI data, echo = FALSE}
+
+#ROIbetas = read.table("/project/3011226.01/bids/derivatives/SPM/ROI/ROIresults.csv", header = T, sep = ',')
+ROIbetas = read.table("P:/3011226.01/bids/derivatives/SPM/ROI/ROIresults.csv", header = T, sep = ',')
+
+ROIbetas$participant = as.factor(ROIbetas$participant)
+
+#tranform in long format
+ROI_betas = melt(ROIbetas, id.vars=c('participant'), variable.name='condition_ROI',value.name='betas')
+ROI_betas = ROI_betas[order(as.integer(ROI_betas$participant)),]
+
+```
+
+
+NP = word lists (springen, rennen, de jongen, het meisje).
+
+SC = coordinated sentences (de jongen rent, het meisje springt).
+
+SE = embedded sentence (de jongen denkt dat het meisje springt).
+
+
+P and C stand for Production and Comprehension.
+
+```{r descriptive stats, echo=FALSE}
+
+mean_betas <- ROI_betas %>% group_by(condition_ROI) %>% summarise(meanBetas = mean(betas),sdBetas = sd(betas),N=n())
+
+kable(mean_betas) %>% kable_styling()
+mean_betas$structure <- NA
+mean_betas$ROI <- NA
+mean_betas$condition <- NA
+mean_betas$condROI <- NA
+
+for (icond in 1:12) {
+  mean_betas$structure[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "_"))[2]
+  mean_betas$ROI[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "_"))[1]
+  mean_betas$condition[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]), "G_"))[2]
+  mean_betas$condROI[icond] = unlist(strsplit(as.character(mean_betas$condition_ROI[icond]),"_[CP]"))[1]
+}
+
+mean_betas$modality = ifelse(endsWith(as.character(mean_betas$condition_ROI),'P'),'Production','Comprehension')
+
+## use SD & N to create error bars for standard error of the mean
+mean_betas$CIu <- mean_betas$meanBetas + (mean_betas$sdBetas/sqrt(mean_betas$N)) 
+mean_betas$CId <- mean_betas$meanBetas - (mean_betas$sdBetas/sqrt(mean_betas$N))
+
+```
+
+### ANOVA 
+We ran an ANOVA with factors ROI (IFG,MTG), structure (NP,SC,SE) and modality (Comprehension, Production).
+
+```{r stats, echo=FALSE}
+# first prepare data frame
+ROI_betas$modality = ifelse(endsWith(as.character(ROI_betas$condition_ROI),'P'),'Production','Comprehension')
+
+ROI_betas$structure <- NA
+ROI_betas$condition <- NA
+ROI_betas$ROI <- NA
+
+for (icond in 1:480) {
+  ROI_betas$structure[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[2]
+  ROI_betas$ROI[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "_"))[1]
+  ROI_betas$condition[icond] = unlist(strsplit(as.character(ROI_betas$condition_ROI[icond]), "G_"))[2]
+}
+ROI_betas$structure = as.factor(ROI_betas$structure)
+ROI_betas$ROI = as.factor(ROI_betas$ROI)
+ROI_betas$modality = as.factor(ROI_betas$modality)
+
+results = aov(betas ~ structure*modality*ROI, data = ROI_betas)
+
+summary(results)
+
+#IFG_betas = data.frame()
+
+#IFG_betas <- ROI_betas[ROI_betas$ROI == "IFG",]
+#resultsIFG = aov(betas ~ structure*modality, data = IFG_betas)
+
+
+```
+
+
+
+We found significant main effects of structure, modality and ROI.
+There is increased activation with increasing constituent structure, overall more activation for production than comprehension and in MTG than IFG.
+
+We also found a significant interaction between structure and modality: there is a steeper increase in activation for constituent structure in production than in comprehension. 
+
+```{r str by mod, echo=FALSE, warning=FALSE}
+MEstructure = ggplot(mean_betas, aes(x=structure, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction structure by modality")
+
+MEstructure 
+```
+\newpage
+And there is a significant interaction between modality and ROI, due to the larger difference between comprehension and production in IFG than in MTG.
+
+```{r mod by ROI, echo=FALSE, fig.width = 6, fig.height = 4, warning=FALSE}
+modROI = ggplot(mean_betas, aes(x=ROI, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates")+ theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction Modality by ROI")
+
+modROI
+```
+
+
+
+```{r plot by structure, fig.width=6, fig.height=4, echo=FALSE}
+ROI_structure = ggplot(mean_betas, aes(x=structure, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_wrap(~ROI+modality, ncol=6)+  theme_mpinl_general() + scale_fill_discrete_mpinl() +# scale_fill_viridis_d() +
+  scale_y_continuous("Parameter Estimates")
+
+ROI_structure
+```
+<!-- ```{r plot by ROI, echo=FALSE} -->
+
+<!-- ROI_bar = ggplot(mean_betas, aes(x=modality, y=meanBetas,fill = modality)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   facet_grid(~ROI+structure)+ theme_mpinl_general() + scale_fill_discrete_mpinl() +#scale_fill_viridis_d() + -->
+<!--   scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=90, vjust = 0.5)) -->
+
+<!-- ROI_bar -->
+<!-- #ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf') -->
+<!-- ``` -->
+<!-- ```{r plot by modality, echo=FALSE} -->
+<!-- ROI_modality = ggplot(mean_betas, aes(x=structure, y=meanBetas,fill = structure)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   facet_grid(~modality + ROI)+ theme_mpinl_general() + scale_fill_discrete_mpinl() + -->
+<!--   scale_y_continuous("Parameter Estimates") -->
+
+<!-- ROI_modality -->
+
+<!-- ``` -->
+<!-- ```{r plot by ROI with structure, echo=FALSE} -->
+<!-- ROI_ROI = ggplot(mean_betas, aes(x=ROI, y=meanBetas,fill = ROI)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   facet_wrap(~structure+modality, ncol=6)+ theme_mpinl_general() + scale_fill_discrete_mpinl() + -->
+<!--   scale_y_continuous("Parameter Estimates") -->
+
+<!-- ROI_ROI -->
+<!-- ``` -->
+<!-- ```{r general plot, echo=FALSE} -->
+<!-- ROI_ROI = ggplot(mean_betas, aes(x=condition_ROI, y=meanBetas,fill = modality)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   theme_mpinl_general() + scale_fill_discrete_mpinl() + -->
+<!--   scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=45, vjust = 0.5)) -->
+
+<!-- ROI_ROI -->
+<!-- ``` -->
+
+
+## Anterior vs Posterior MTG
+
+Since in the whole-brain results the LMTG activation was reflected in two separate clusters, one anterior and one posterior, we also ran an exploratory ROI analysis by splitting the Neurosynth MTG ROI in anterior and posterior.
+
+![aMTG and pMTG ROIs](aMTG-pMTG.png)
+
+```{r import MTG data, echo = FALSE}
+
+MTGbetas = read.table("P:/3011226.01/bids/derivatives/SPM/ROI/ant-postMTG/MTGresults.csv", header = T, sep = ',')
+
+MTGbetas$participant = as.factor(MTGbetas$participant)
+
+#tranform in long format
+MTGbetas = melt(MTGbetas, id.vars=c('participant'), variable.name='condition_ROI',value.name='betas')
+MTGbetas = MTGbetas[order(as.integer(MTGbetas$participant)),]
+
+```
+```{r descriptive stats MTG, echo=FALSE}
+
+mean_MTGbetas <- MTGbetas %>% group_by(condition_ROI) %>% summarise(meanBetas = mean(betas),sdBetas = sd(betas),N=n())
+
+kable(mean_MTGbetas) %>% kable_styling()
+mean_MTGbetas$structure <- NA
+mean_MTGbetas$ROI <- NA
+mean_MTGbetas$condition <- NA
+mean_MTGbetas$condROI <- NA
+
+for (icond in 1:12) {
+  mean_MTGbetas$structure[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "_"))[2]
+  mean_MTGbetas$ROI[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "_"))[1]
+  mean_MTGbetas$condition[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]), "G_"))[2]
+  mean_MTGbetas$condROI[icond] = unlist(strsplit(as.character(mean_MTGbetas$condition_ROI[icond]),"_[CP]"))[1]
+}
+
+mean_MTGbetas$modality = ifelse(endsWith(as.character(mean_MTGbetas$condition_ROI),'P'),'Production','Comprehension')
+
+## use SD & N to create error bars for standard error of the mean
+mean_MTGbetas$CIu <- mean_MTGbetas$meanBetas + (mean_MTGbetas$sdBetas/sqrt(mean_MTGbetas$N)) 
+mean_MTGbetas$CId <- mean_MTGbetas$meanBetas - (mean_MTGbetas$sdBetas/sqrt(mean_MTGbetas$N))
+
+```
+\newpage
+### ANOVA 
+Factors ROI (aMTG,pMTG), structure (NP,SC,SE) and modality (Comprehension, Production).
+
+```{r stats MTG, echo=FALSE}
+# first prepare data frame
+MTGbetas$modality = ifelse(endsWith(as.character(MTGbetas$condition_ROI),'P'),'Production','Comprehension')
+
+MTGbetas$structure <- NA
+MTGbetas$condition <- NA
+MTGbetas$ROI <- NA
+
+for (icond in 1:480) {
+  MTGbetas$structure[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "_"))[2]
+  MTGbetas$ROI[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "_"))[1]
+  MTGbetas$condition[icond] = unlist(strsplit(as.character(MTGbetas$condition_ROI[icond]), "G_"))[2]
+}
+
+MTGbetas$modality = as.factor(MTGbetas$modality)
+MTGbetas$ROI = as.factor(MTGbetas$ROI)
+MTGbetas$structure = as.factor(MTGbetas$structure)
+
+MTGresults = aov(betas ~ structure*ROI*modality, data = MTGbetas)
+summary(MTGresults)
+
+
+```
+
+There are main effects of structure and ROI, but no main effect of modality. This is not surprising, since the difference between production and comprehension was reduced in MTG overall.
+There are no interactions. 
+
+
+
+```{r str by mod MTG , echo=FALSE}
+MEstructure = ggplot(mean_MTGbetas, aes(x=structure, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction structure by modality")
+  
+
+MEstructure
+```
+
+
+```{r mod by ROI MTG, fig.height = 4, echo=FALSE}
+modROI = ggplot(mean_MTGbetas, aes(x=ROI, y=meanBetas)) + geom_boxplot(aes(color = modality)) +
+  #geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  #facet_wrap(~ROI+modality, ncol=6)+ 
+  coord_cartesian(ylim=c(2,6)) +
+  scale_y_continuous("Parameter Estimates") + theme_mpinl_general() + scale_colour_discrete_mpinl() +
+  ggtitle("Interaction Modality by ROI")
+
+modROI
+``` 
+
+
+
+```{r plot by structure MTG, fig.height= 4, echo=FALSE}
+ROI_structure = ggplot(mean_MTGbetas, aes(x=structure, y=meanBetas,fill = modality)) + geom_bar(stat='identity') +
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) +
+  facet_wrap(~ROI+modality, ncol=6)+ theme_mpinl_general() + scale_fill_discrete_mpinl()+ # scale_fill_viridis_d() + 
+  scale_y_continuous("Parameter Estimates")
+
+ROI_structure
+```
+
+<!-- ```{r plot by ROI MTG, echo=FALSE} -->
+
+<!-- ROI_bar = ggplot(mean_MTGbetas, aes(x=modality, y=meanBetas,fill = modality)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   facet_grid(~ROI+structure)+ theme_mpinl_general() + scale_fill_discrete_mpinl() + #scale_fill_viridis_d() + -->
+<!--   scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=90, vjust = 0.5)) -->
+
+<!-- ROI_bar -->
+<!-- #ggsave('P:/3011226.01/bids/derivatives/SPM/ROI/ROI_bar.pdf') -->
+<!-- ``` -->
+<!-- ```{r general plot MTG, echo=FALSE} -->
+<!-- ROI_ROI = ggplot(mean_MTGbetas, aes(x=condition_ROI, y=meanBetas,fill = modality)) + geom_bar(stat='identity') + -->
+<!--   geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1) + -->
+<!--   theme_mpinl_general() + scale_fill_discrete_mpinl() + -->
+<!--   scale_y_continuous("Parameter Estimates") + theme(axis.text.x = element_text(angle=45, vjust = 0.5)) -->
+
+<!-- ROI_ROI -->
+<!-- ``` -->
