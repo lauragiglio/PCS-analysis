@@ -10,7 +10,9 @@ output:
   
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = 'P:/3011226.01/behavioural/')
+#knitr::opts_knit$set(root.dir = '/project/3011226.01/behavioural/')
+knitr::opts_knit$set(root.dir ='P:/3011226.01/behavioural/')
+
 library(ggplot2)
 library(plyr)
 library(dplyr)
@@ -27,8 +29,13 @@ if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
 library(cowplot)
 library(dplyr)
 library(readr)
+library(lme4)
+library(stringi)
+library(car)
+library(mpinltheme)
+#source("/home/language/laugig/R/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
+source("M:/R/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
 
-source("C:/Users/laugig/Documents/RainCloudPlots-master/RainCloudPlots-master/tutorial_R/R_rainclouds.R")
 #source("summarySE.R")
 #source("simulateData.R")
 ```
@@ -37,22 +44,27 @@ Importing coding data and Importing onset and offset marking
 ```{r import, echo=FALSE, warning=FALSE}
 
 #import coding results
-#setwd("P:/3011226.01/behavioural/")
-coded_subjs = c("01","02","03","04","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","24","25", "26","27","28", "29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","46")
+#setwd("project/3011226.01/behavioural/")
+coded_subjs = c("01","02","04","07","08","09","10","11","12","14","15","16","17","18","19","20","21","22","24","25", "26","27","28", "29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","46")
 accdata = data.frame()
 praatdata = data.frame()
 for (isubj in coded_subjs) {
   
   #open file
+  #dirpath = paste("/project/3011226.01/behavioural/s", isubj, sep="")
   dirpath = paste("P:/3011226.01/behavioural/s", isubj, sep="")
+
   allfilenames = dir(dirpath, pattern = "P._run*")
   for (irun in 1:length(allfilenames)) {
     
     # get run order
-    run_order = read.table(paste("s", isubj, "/s", isubj, ".txt", sep="" ), header = T, sep = '\t')
-    
+    #run_order = read.table(paste("/project/3011226.01/behavioural/s", isubj, "/s", isubj, ".txt", sep="" ), header = T, sep = '\t')
+    run_order = read.table(paste("P:/3011226.01/behavioural/s", isubj, "/s", isubj, ".txt", sep="" ), header = T, sep = '\t')
+
     # get accuracy files
+    #filename = paste("/project/3011226.01/behavioural/s", isubj, "/", allfilenames[run_order$Order_runs[irun]], sep="")
     filename = paste("P:/3011226.01/behavioural/s", isubj, "/", allfilenames[run_order$Order_runs[irun]], sep="")
+
     temp = read.delim(filename, header = T, sep = '\t')
     temp$Actor <- NULL
     temp$X <- NULL
@@ -65,7 +77,9 @@ for (isubj in coded_subjs) {
     accdata = rbind(accdata,temp)
 
     # get onset offset times from praat txt file
+    #filename2 = paste("/project/3011226.01/behavioural/s", isubj, "/", irun, "/filtered/onsets_durationAutomatic.txt", sep="")
     filename2 = paste("P:/3011226.01/behavioural/s", isubj, "/", irun, "/filtered/onsets_durationAutomatic.txt", sep="")
+
     temp2 = read.table(filename2, header = F, sep = '\t')
     
     # add subj and run number
@@ -76,6 +90,11 @@ for (isubj in coded_subjs) {
     praatdata = rbind(praatdata,temp2)
   }
 }
+
+write.csv(praatdata,"P:/3011226.01/behavioural/praat_data.csv",row.names=FALSE)
+write.csv(accdata,"P:/3011226.01/behavioural/accuracy_data.csv",row.names=FALSE)
+
+
 ```
 
 Merging accuracy and praat data
@@ -115,17 +134,56 @@ SE = embedded sencence, "de man denkt dat de vrouw springt" (the man thinks that
 
 Correct number of trials per participant
 
-```{r correct, echo=FALSE}
+```{r stats correct, echo=FALSE}
 #alldata$Coding[875] = 1
 alldata$Accuracy2 = ifelse(alldata$Accuracy2 == 1, 1,2)
 
-#as.data.frame.matrix(table(alldata$Accuracy2,alldata$participant,alldata$Condition))
-#table(alldata$Accuracy,alldata$participant,alldata$Condition)
-#a = as.data.frame.matrix(table(alldata$Accuracy2,alldata$Condition)/10)
-#ab = melt(a)
-#ggplot(ab,aes(x=variable, y = value)) + geom_bar(stat= 'identity')
-#a
-#
+
+alldata2 = droplevels(alldata[alldata$Condition != "FIL",])
+alldata2$Accuracy2 = ifelse(alldata2$Accuracy2 == 1, 1,0)
+alldata2$Trial = as.factor(alldata2$Trial)
+table(alldata2$Accuracy2,alldata2$participant)
+
+#control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e6))
+
+#contrasts(alldata2$Condition) <- contr.Sum(levels(alldata2$Condition)) for deviation coding
+modelAcc = glmer(Accuracy2 ~ Condition + (1|participant)+ (1|Verb1) + (1|Verb2) , data=alldata2, family='binomial',control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e6)))
+# doesn't converge with condition|participant, even though variance was quite high...
+summary(modelAcc)
+Anova(modelAcc) # to get effect of Condition
+
+#to get all pairwise comparisons
+alldata2$Condition <- relevel(alldata2$Condition, ref = "NP")
+modelAcc2 = glmer(Accuracy2 ~ Condition + (1|participant) + (1|Verb1) + (1|Verb2), data=alldata2, family='binomial')
+summary(modelAcc2)
+
+``` 
+
+```{r error type analysis, echo=FALSE}
+alldata$ErrorType2=0
+alldata$ErrorType1=0
+alldata$ErrorType = as.character(alldata$ErrorType)
+alldata$ErrorType[is.na(alldata$ErrorType)]=0
+for (n in 1:length(alldata$ErrorType)) {
+  if (alldata$Accuracy2[n] == 2) {
+    if (nchar(alldata$ErrorType[n])>2) {
+      alldata$ErrorType2[n]=str_sub(alldata$ErrorType[n],-1)
+      alldata$ErrorType1[n]=str_sub(alldata$ErrorType[n],1,1)
+    }
+    else if (nchar(alldata$ErrorType[n])>1) {
+      alldata$ErrorType1[n]=str_sub(alldata$ErrorType[n],1,1)
+    }
+    else {
+      alldata$ErrorType1[n]=alldata$ErrorType[n]
+    }
+  }
+} 
+a=table(alldata$ErrorType1)
+b=table(alldata$ErrorType2)
+```
+
+```{r correct plots, echo=FALSE}
+
 #average of correct trials per condition
 accuracy <- data.frame
 accuracy <- alldata %>% group_by(Condition,participant) %>% summarise(correct = sum(Accuracy2==1))
@@ -146,28 +204,119 @@ ggplot(accuracy, aes(x=Condition, y=correct)) + geom_bar(stat='identity')
 
 #ggplot(accuracy, aes(x=correct)) + geom_bar()
 
-
 ```
+
 ```{r accuracyplot, echo=FALSE}
 accuracyplot = ggplot(accuracy, aes(x=Condition, y = correct)) +
   geom_jitter(width=.1,aes(color=participant)) + labs(y= '% Correct responses' ) +
   geom_violin(alpha=0.3)
-
 #ggsave('accuracy_plot.pdf', plot=accuracyplot)
-
 accuracyplot
+
+accuracy$structure <- ifelse(accuracy$Condition == "NP","C1",ifelse(accuracy$Condition == "SC","C2",(ifelse(accuracy$Condition == "SE","C4","FIL"))))
+
+mean_accuracy <- accuracy %>% group_by(structure) %>% summarise(meanC = mean(correct),sdC=sd(correct),sem=sd(correct)/sqrt(40))
+mean_accuracy
+
+p1 <- ggplot(accuracy,aes(x=structure,y=correct, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  geom_point(data = mean_accuracy, aes(x = structure, y = meanC), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_accuracy, aes(x = structure, y = meanC, ymin = meanC-sem, ymax = meanC+sem), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Percentage correct')+xlab('Condition')+theme_mpinl_general()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_discrete_mpinl()+
+  scale_fill_discrete_mpinl()+
+  ggtitle("Accuracy")
+p1
+ggsave('P:/3011226.01/figures/accuracy_plot.png', width = 4, height = 3)
+ggsave(
+  'P:/3011226.01/figures/accuracy_plot.tif',
+  plot = last_plot(),
+  device = "tiff",
+  path = NULL,
+  scale = 1,
+  width = 80,
+  height = 80,
+  units = "mm",
+  dpi = 300,
+  limitsize = TRUE
+)
+
+p2 <- ggplot(accuracy,aes(x=structure,y=correct, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .8)+
+  geom_point(data = mean_accuracy, aes(x = structure, y = meanC), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_accuracy, aes(x = structure, y = meanC, ymin = meanC-sem, ymax = meanC+sem), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Percentage correct')+xlab('Condition')+theme_mpinl_poster()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_discrete_mpinl()+
+  scale_fill_discrete_mpinl()+
+  ggtitle("Accuracy")
+p2
+
+ggsave('P:/3011226.01/figures/accuracy_poster.png', width = 8, height = 7)
 ```
 
 ```{r makecorrect, echo=FALSE}
 #only keep correct trials
 correctdata = droplevels(alldata[alldata$Accuracy2=='1',])
-
-
-#there's an extra NA row, delete for now
-#correctdata = correctdata[-851,]
-
+correctdata$Duration = correctdata$Offset - correctdata$Onset
 #correctdata = read.csv('correctdata.csv')
 #correctdata = write.csv(correctdata, 'correctdata.csv', row.names = FALSE)
+table(correctdata$participant,correctdata$Condition)
+
+```
+
+```{r onset time analysis, echo=TRUE}
+correctdata2 = droplevels(correctdata[correctdata$Condition != "FIL",]) # drop filler condition
+table(correctdata2$participant,correctdata2$Condition)
+write.csv(correctdata2,"P:/3011226.01/bids/derivatives/SPM/ROI/onsets.csv",row.names=FALSE)
+
+correctdata2$logOnset = log(correctdata2$Onset)
+
+modelOn = lmer(logOnset ~ Condition + (Condition|participant) + (1|Verb1)+(1|Verb2), correctdata2, REML=FALSE,control=lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))) 
+summary(modelOn)
+Anova(modelOn)
+library(lmerTest)
+anova(modelOn)
+# ts <- fixef(modelOn) / sqrt(diag(vcov(modelOn)))
+# print(round(ts,2))
+# ps <- 2*(1-pnorm(abs(ts)))
+# print(round(ps,3))
+
+
+#relevel to get difference between SC and SE
+correctdata2$Condition <- relevel(correctdata2$Condition, ref = "SC")
+modelOn2 = lmer(logOnset ~ Condition + (Condition| participant) + (1|Verb1)+(1|Verb2), correctdata2, REML=FALSE,control=lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))) 
+summary(modelOn2)
+
+ts <- fixef(modelOn2) / sqrt(diag(vcov(modelOn2)))
+print(round(ts,2))
+ps <- 2*(1-pnorm(abs(ts)))
+print(round(ps,3))
+
+```
+
+```{r duration time analysis, echo=TRUE}
+correctdata2$logDuration = log(correctdata2$Duration)
+
+
+modelD = lmer(logDuration ~ Condition + (Condition| participant) + (1|Verb1)+ (1|Verb2), correctdata2, REML=FALSE,control=lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))) 
+summary(modelD)
+Anova(modelD)
+
+ts <- fixef(modelD) / sqrt(diag(vcov(modelD)))
+print(round(ts,2))
+ps <- 2*(1-pnorm(abs(ts)))
+print(round(ps,3))
+#relevel to get difference between SC and SE
+correctdata2$Condition <- relevel(correctdata2$Condition, ref = "SC")
+modelD2 = lmer(logDuration ~ Condition + (Condition| participant) + (1|Verb1)+ (1|Verb2), correctdata2, REML=FALSE,control=lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))) 
+summary(modelD2)
+ts <- fixef(modelD2) / sqrt(diag(vcov(modelD2)))
+print(round(ts,2))
+ps <- 2*(1-pnorm(abs(ts)))
+print(round(ps,3))
+
 ```
 
 ## Onsets and duration means for each participant
@@ -177,13 +326,103 @@ correctdata = droplevels(alldata[alldata$Accuracy2=='1',])
 #average of correct trials per condition
 onsets <- data.frame
 onsets <- correctdata %>% group_by(Condition,participant) %>% summarise(onset = mean(Onset))
+durations <- data.frame
+durations <- correctdata %>% group_by(Condition,participant) %>% summarise(duration = mean(Offset-Onset))
 
-#accuracy$correct = accuracy$correct/80*100
 
-#mean_accuracy <- accuracy %>% group_by(Condition) %>% summarise(meanC = mean(correct))
+
+onsets$structure <- ifelse(onsets$Condition == "NP","C1",ifelse(onsets$Condition == "SC","C2",(ifelse(onsets$Condition == "SE","C4","FIL"))))
+durations$structure <- ifelse(durations$Condition == "NP","C1",ifelse(durations$Condition == "SC","C2",(ifelse(durations$Condition == "SE","C4","FIL"))))
+
+mean_times = correctdata %>% group_by(Condition) %>% summarise(meanOnset = mean(Onset),sdO=sd(Onset),semO=sd(Onset)/sqrt(40),meanDuration = mean(Offset-Onset),sdD=sd(Offset-Onset),semD=sd(Offset-Onset)/sqrt(40))
+
+mean_times$structure <- ifelse(mean_times$Condition == "NP","C1",ifelse(mean_times$Condition == "SC","C2",(ifelse(mean_times$Condition == "SE","C4","FIL"))))
+
+
+```
+```{r raincloud plot onset condition with means, echo=FALSE}
+p7 <- ggplot(onsets,aes(x=structure,y=onset, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  geom_point(data = mean_times, aes(x = structure, y = meanOnset), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = structure, y = meanOnset, ymin = meanOnset-semO, ymax = meanOnset+semO), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Onset (sec)')+xlab('Condition')+theme_mpinl_general()+guides(fill = FALSE, colour = FALSE) +
+  #scale_colour_discrete_mpinl()+  scale_fill_discrete_mpinl()+
+  scale_colour_grey()+  scale_fill_grey()+
+
+  ggtitle("Production Onset")
+p7
+
+p9 <- ggplot(onsets,aes(x=structure,y=onset, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .8)+
+  geom_point(data = mean_times, aes(x = structure, y = meanOnset), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = structure, y = meanOnset, ymin = meanOnset-semO, ymax = meanOnset+semO), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Onset (sec)')+xlab('Condition')+theme_mpinl_poster()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_discrete_mpinl()+
+  scale_fill_discrete_mpinl()+
+  ggtitle("Production Onset")
+p9
+```
+
+```{r raincloud plot onset condition with means, echo=FALSE}
+p8 <- ggplot(durations,aes(x=structure,y=duration, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  geom_point(data = mean_times, aes(x = structure, y = meanDuration), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = structure, y = meanDuration, ymin = meanDuration-semD, ymax = meanDuration+semD), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Duration (sec)')+xlab('Condition')+theme_mpinl_general()+guides(fill = FALSE, colour = FALSE) +
+  #scale_colour_discrete_mpinl()+  scale_fill_discrete_mpinl()+
+  scale_color_grey() + scale_fill_grey() +
+  ggtitle("Production Duration")
+p8
+all_plot <- plot_grid(p1, p7, p8, labels="AUTO", nrow=1)
+all_plot
+ggsave('P:/3011226.01/figures/onset_duration.png', width = 6, height = 3)
+ggsave(
+  'P:/3011226.01/figures/behav_all_fig.tif',
+  plot = last_plot(),
+  device = "tiff",
+  path = NULL,
+  scale = 1,
+  width = 180,
+  height = 80,
+  units = "mm",
+  dpi = 300,
+  limitsize = TRUE
+)
+
+
+p10 <- ggplot(durations,aes(x=structure,y=duration, fill = structure, colour = structure))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .8)+
+  geom_point(data = mean_times, aes(x = structure, y = meanDuration), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = structure, y = meanDuration, ymin = meanDuration-semD, ymax = meanDuration+semD), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Duration (sec)')+xlab('Condition')+theme_mpinl_poster()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_discrete_mpinl()+
+  scale_fill_discrete_mpinl()+
+  ggtitle("Production Duration")
+p10
+all_plot_poster <- plot_grid(p9, p10, labels="AUTO")
+
+#title <- ggdraw() + 
+#  draw_label("",
+ #            fontface = 'bold')
+#
+#all_plot_final <- plot_grid(title, all_plot, ncol = 1, rel_heights = c(0.1, 1)) # rel_heights values control title margins
+
+
+all_plot_poster
+ggsave('P:/3011226.01/figures/onset_duration_poster.png', width = 15, height = 7)
+
+```
+
+```{r various plots}
 
 ggplot(onsets, aes(x=Condition, y = onset)) +
   geom_jitter(width=.1,aes(color=participant)) + labs(y= 'Onset' ) + geom_violin(alpha = 0.2)
+
+mean_times = correctdata %>% group_by(Condition) %>% summarise(meanOnset = mean(Onset),sdO=sd(Onset),semO=sd(Onset)/sqrt(40),meanDuration = mean(Offset-Onset),sdD=sd(Offset-Onset),semD=sd(Offset-Onset)/sqrt(40))
 
 ```
 ```{r durationsmeans, echo=FALSE}
@@ -197,205 +436,242 @@ ggplot(durations, aes(x=Condition, y = duration)) +
 
 ```
 
-<!-- ## Onsets and duration means for each participant with condition -->
+## Onsets and duration means for each participant with condition
+
+```{r onsetmeans per cond, echo=FALSE}
+
+#average of correct trials per condition
+
+#accuracy$correct = accuracy$correct/80*100
+
+#mean_accuracy <- accuracy %>% group_by(Condition) %>% summarise(meanC = mean(correct))
+
+ggplot(onsets, aes(x=Condition, y = onset)) +
+  geom_col(stat='identity', aes(fill=Condition)) + labs(y= 'Onset' ) +
+  coord_cartesian(ylim=c(1,2.3)) +
+    facet_grid(.~participant)
+
+
+```
+```{r durationsmeans per cond, echo=FALSE}
+
+#average of correct trials per condition
+
+ggplot(durations, aes(x=Condition, y = duration)) +
+  geom_col(stat='identity', aes(fill=Condition)) + labs(y= 'Onset' ) +
+  #coord_cartesian(ylim=c(1,3.5)) +
+    facet_grid(.~participant)
+
+```
+
+
+## Raincloud plots per condition
+
+```{r raincloud plot onset condition, echo=FALSE}
+p7 <- ggplot(onsets,aes(x=Condition,y=onset))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
+  geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+
+  #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+  #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+  ylab('Onset')+xlab('Condition')+theme_cowplot() +
+  ggtitle("Onset times per condition")
+
+p7
+#ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h)
+```
+```{r raincloud plot onset condition with means, echo=FALSE}
+p7 <- ggplot(onsets,aes(x=Condition,y=onset, fill = Condition, colour = Condition))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  geom_point(data = mean_times, aes(x = Condition, y = meanOnset), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = Condition, y = meanOnset, ymin = meanOnset-semO, ymax = meanOnset+semO), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Onset (sec)')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_brewer(palette = "Dark2")+
+  scale_fill_brewer(palette = "Dark2")+
+  ggtitle("Production Onset")
+p7
+
+```
+```{r raincloud plot onset condition with means, echo=FALSE}
+p8 <- ggplot(durations,aes(x=Condition,y=duration, fill = Condition, colour = Condition))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  geom_point(data = mean_times, aes(x = Condition, y = meanDuration), position = position_nudge(.25), colour = "BLACK")+
+  geom_errorbar(data = mean_times, aes(x = Condition, y = meanDuration, ymin = meanDuration-semD, ymax = meanDuration+semD), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+  ylab('Duration (sec)')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) +
+  scale_colour_brewer(palette = "Dark2")+
+  scale_fill_brewer(palette = "Dark2")+
+  ggtitle("Production Duration")
+p8
+
+all_plot <- plot_grid(p7, p8, labels="AUTO")
+
+#title <- ggdraw() + 
+#  draw_label("",
+ #            fontface = 'bold')
+#
+#all_plot_final <- plot_grid(title, all_plot, ncol = 1, rel_heights = c(0.1, 1)) # rel_heights values control title margins
+
+
+all_plot
+ggsave('/project/3011226.01/scripts/onset_duration.png', width = 6, height = 3)
+```
+
+```{r raincloud plot durations condition, echo=FALSE}
+p8 <- ggplot(durations,aes(x=Condition,y=duration))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
+  geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+
+  #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+  #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+  ylab('Duration')+xlab('Condition')+theme_cowplot() +
+  ggtitle("Durations per condition")
+
+p8
+#ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h)
+```
+
+## Raincloud plots per participant
 
-<!-- ```{r onsetmeans per cond, echo=FALSE} -->
+```{r raincloud plot onset, echo=FALSE}
+p5 <- ggplot(correctdata,aes(x=participant,y=Onset, fill = Condition))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
+  geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+
+  #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+  #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+  ylab('Onset')+xlab('Participant')+theme_cowplot() +
+  ggtitle("Onset times per participant")
 
-<!-- #average of correct trials per condition -->
+p5
+#ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h)
+```
 
-<!-- #accuracy$correct = accuracy$correct/80*100 -->
+```{r raincloud plot durations, echo=FALSE}
+p6 <- ggplot(correctdata,aes(x=participant,y=Offset-Onset, fill = Condition))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+
+  geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+
+  #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+  #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+  ylab('Duration')+xlab('Participant')+theme_cowplot() +
+  ggtitle("Durations per participant")
 
-<!-- #mean_accuracy <- accuracy %>% group_by(Condition) %>% summarise(meanC = mean(correct)) -->
+p6
+#ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h)
+```
 
-<!-- ggplot(onsets, aes(x=Condition, y = onset)) + -->
-<!--   geom_col(stat='identity', aes(fill=Condition)) + labs(y= 'Onset' ) + -->
-<!--   coord_cartesian(ylim=c(1,2.3)) + -->
-<!--     facet_grid(.~participant) -->
 
+#other stuff
+```{r raincloud plot, echo=FALSE}
+p5 <- ggplot(correctdata,aes(x=participant,y=Onset, fill = Condition))+
+  geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+  geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+
+#note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+#geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) +
+ggtitle("Figure 5: Raincloud Plot w/Boxplots")
 
-<!-- ``` -->
-<!-- ```{r durationsmeans per cond, echo=FALSE} -->
+p5
+#ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h)
+```
 
-<!-- #average of correct trials per condition -->
 
-<!-- ggplot(durations, aes(x=Condition, y = duration)) + -->
-<!--   geom_col(stat='identity', aes(fill=Condition)) + labs(y= 'Onset' ) + -->
-<!--   #coord_cartesian(ylim=c(1,3.5)) + -->
-<!--     facet_grid(.~participant) -->
 
-<!-- ``` -->
+```{r onsetoffset, echo=FALSE}
+# mean onset and offset across participants
 
 
-<!-- ## Raincloud plots per condition -->
+means <- data.frame
+means <- correctdata %>% group_by(Condition,participant) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), m_offset = mean(Offset), std_offset= sd(Offset))
+means
+p6 <- ggplot(means,aes(x=Condition,y=m_onset, fill = participant))+
+geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+geom_point(position = position_jitter(width = .15), size = .25)+
+#note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = m_onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) +
+ggtitle("Figure 5: Raincloud Plot w/Boxplots")
+p6
 
-<!-- ```{r raincloud plot onset condition, echo=FALSE} -->
-<!-- p7 <- ggplot(onsets,aes(x=Condition,y=onset))+ -->
-<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
-<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+ -->
-<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
-<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!--   ylab('Onset')+xlab('Condition')+theme_cowplot() + -->
-<!--   ggtitle("Onset times per condition") -->
 
-<!-- p7 -->
-<!-- #ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h) -->
-<!-- ``` -->
+```
 
-<!-- ```{r raincloud plot durations condition, echo=FALSE} -->
-<!-- p8 <- ggplot(durations,aes(x=Condition,y=duration))+ -->
-<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
-<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = participant))+ -->
-<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
-<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!--   ylab('Duration')+xlab('Condition')+theme_cowplot() + -->
-<!--   ggtitle("Durations per condition") -->
+```{r participant info, echo=FALSE}
+# mean onset and offset across participants
 
-<!-- p8 -->
-<!-- #ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h) -->
-<!-- ``` -->
 
-<!-- ## Raincloud plots per participant -->
+means_p <- data.frame
+means <- correctdata %>% group_by(participant,Condition) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), m_offset = mean(Offset), std_offset= sd(Offset))
+means
+p7 <- ggplot(means,aes(x=Condition,y=m_onset, fill = participant))+
+geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+
+geom_point(position = position_jitter(width = .15), size = .25)+
+#note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.
+geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = m_onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") +
+ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) +
+ggtitle("Figure 5: Raincloud Plot w/Boxplots")
+p7
 
-<!-- ```{r raincloud plot onset, echo=FALSE} -->
-<!-- p5 <- ggplot(correctdata,aes(x=participant,y=Onset, fill = Condition))+ -->
-<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
-<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+ -->
-<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
-<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!--   ylab('Onset')+xlab('Participant')+theme_cowplot() + -->
-<!--   ggtitle("Onset times per participant") -->
 
-<!-- p5 -->
-<!-- #ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h) -->
-<!-- ``` -->
+```
 
-<!-- ```{r raincloud plot durations, echo=FALSE} -->
-<!-- p6 <- ggplot(correctdata,aes(x=participant,y=Offset-Onset, fill = Condition))+ -->
-<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2, alpha=0.3)+ -->
-<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+ -->
-<!--   #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds.  -->
-<!--   #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!--   ylab('Duration')+xlab('Participant')+theme_cowplot() + -->
-<!--   ggtitle("Durations per participant") -->
+```{r plot, echo=FALSE}
 
-<!-- p6 -->
-<!-- #ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h) -->
-<!-- ``` -->
+pl1 = ggplot(correctdata, aes(x=Onset, y=Offset)) + geom_point(aes(color = Condition), alpha=0.5)
+pl1
+#ggsave('plotill.pdf', device = 'pdf')
+ggplot(correctdata, aes(y=Offset-Onset,x=Trial)) + geom_point(aes(color = as.factor(participant)))
+plot(correctdata$Offset - correctdata$Onset)
 
 
-<!-- #other stuff -->
-<!-- ```{r raincloud plot, echo=FALSE} -->
-<!-- p5 <- ggplot(correctdata,aes(x=participant,y=Onset, fill = Condition))+ -->
-<!--   geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+ -->
-<!--   geom_point(position = position_jitter(width = .15), size = .25, aes(color = Condition))+ -->
-<!-- #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds. -->
-<!-- #geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = Onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!-- ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) + -->
-<!-- ggtitle("Figure 5: Raincloud Plot w/Boxplots") -->
+```
 
-<!-- p5 -->
-<!-- #ggsave('../figs/tutorial_R/5boxplots.png', width = w, height = h) -->
-<!-- ``` -->
+Some trials may have been consistently longer across participants.
 
+```{r plottrials, echo=FALSE}
 
+trials <- correctdata %>% group_by(Trial) %>% summarise(m_onset = mean(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), SEM_offset = std.error(Offset))
+trials$condition <- as.factor(c(rep(1,80), rep(2,80), rep(3,80), rep(4,80)))
 
-<!-- ```{r onsetoffset, echo=FALSE} -->
-<!-- # mean onset and offset across participants -->
+ggplot(trials, aes(x=m_onset, y=m_duration)) + geom_point(aes(color = condition))
 
+ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point()
 
-<!-- means <- data.frame -->
-<!-- means <- correctdata %>% group_by(Condition,participant) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), m_offset = mean(Offset), std_offset= sd(Offset)) -->
-<!-- means -->
-<!-- p6 <- ggplot(means,aes(x=Condition,y=m_onset, fill = participant))+ -->
-<!-- geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+ -->
-<!-- geom_point(position = position_jitter(width = .15), size = .25)+ -->
-<!-- #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds. -->
-<!-- geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = m_onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!-- ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) + -->
-<!-- ggtitle("Figure 5: Raincloud Plot w/Boxplots") -->
-<!-- p6 -->
 
+```
+```{r plottrials, echo=FALSE}
 
-<!-- ``` -->
+trials$Verb1 = correctdata$Verb1[1:320]
+trials$Verb2 = correctdata$Verb2[1:320]
 
-<!-- ```{r participant info, echo=FALSE} -->
-<!-- # mean onset and offset across participants -->
+ggplot(trials, aes(x=Trial, y=m_duration)) + geom_point(aes(color = Verb2))
 
+ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point(aes(color = Verb1))
 
-<!-- means_p <- data.frame -->
-<!-- means <- correctdata %>% group_by(participant,Condition) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), m_offset = mean(Offset), std_offset= sd(Offset)) -->
-<!-- means -->
-<!-- p7 <- ggplot(means,aes(x=Condition,y=m_onset, fill = participant))+ -->
-<!-- geom_flat_violin(position = position_nudge(x = .25, y = 0),adjust =2)+ -->
-<!-- geom_point(position = position_jitter(width = .15), size = .25)+ -->
-<!-- #note that here we need to set the x-variable to a numeric variable and bump it to get the boxplots to line up with the rainclouds. -->
-<!-- geom_boxplot(aes(x = as.numeric(Condition)+0.25, y = m_onset),outlier.shape = NA, alpha = 0.3, width = .1, colour = "BLACK") + -->
-<!-- ylab('Onset')+xlab('Condition')+theme_cowplot()+guides(fill = FALSE, colour = FALSE) + -->
-<!-- ggtitle("Figure 5: Raincloud Plot w/Boxplots") -->
-<!-- p7 -->
+ggplot(trials, aes(x=Verb1, y = m_onset)) + geom_point(aes(color=Verb1))
 
+```
 
-<!-- ``` -->
+```{r plotverbs, echo=FALSE}
 
-<!-- ```{r plot, echo=FALSE} -->
+verb1 <- correctdata %>% group_by(Verb1) %>% summarise(m_onset = mean(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), SEM_offset = std.error(Offset))
 
-<!-- pl1 = ggplot(correctdata, aes(x=Onset, y=Offset)) + geom_point(aes(color = Condition), alpha=0.5) -->
-<!-- pl1 -->
-<!-- #ggsave('plotill.pdf', device = 'pdf') -->
-<!-- ggplot(correctdata, aes(y=Offset-Onset,x=Trial)) + geom_point(aes(color = as.factor(participant))) -->
-<!-- plot(correctdata$Offset - correctdata$Onset) -->
+ggplot(verb1[0:20,], aes(x=m_onset, y=m_duration)) + geom_violin(aes(color = Verb1))
 
+ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point()
 
-<!-- ``` -->
 
-<!-- Some trials may have been consistently longer across participants. -->
+```
+```{r plotverbs, echo=FALSE}
 
-<!-- ```{r plottrials, echo=FALSE} -->
+verb1 <- correctdata %>% group_by(Verb1) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), std_offset = sd(Offset), SEM_offset = std.error(Offset))
 
-<!-- trials <- correctdata %>% group_by(Trial) %>% summarise(m_onset = mean(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), SEM_offset = std.error(Offset)) -->
-<!-- trials$condition <- as.factor(c(rep(1,80), rep(2,80), rep(3,80), rep(4,80))) -->
 
-<!-- ggplot(trials, aes(x=m_onset, y=m_duration)) + geom_point(aes(color = condition)) -->
+ggplot(verb1, aes(x=Verb1, y=m_offset)) + geom_point(aes(color = Verb1))
 
-<!-- ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point() -->
+ggplot(verb1, aes(x=Verb1, y=m_onset)) + geom_point(aes(color = Verb1))
 
+ggplot(verb1, aes(x=Verb1, y=m_duration)) + geom_point(aes(color = Verb1))
 
-<!-- ``` -->
-<!-- ```{r plottrials, echo=FALSE} -->
+ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point()
 
-<!-- trials$Verb1 = correctdata$Verb1[1:320] -->
-<!-- trials$Verb2 = correctdata$Verb2[1:320] -->
 
-<!-- ggplot(trials, aes(x=Trial, y=m_duration)) + geom_point(aes(color = Verb2)) -->
-
-<!-- ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point(aes(color = Verb1)) -->
-
-<!-- ggplot(trials, aes(x=Verb1, y = m_onset)) + geom_point(aes(color=Verb1)) -->
-
-<!-- ``` -->
-
-<!-- ```{r plotverbs, echo=FALSE} -->
-
-<!-- verb1 <- correctdata %>% group_by(Verb1) %>% summarise(m_onset = mean(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), SEM_offset = std.error(Offset)) -->
-
-<!-- ggplot(verb1[0:20,], aes(x=m_onset, y=m_duration)) + geom_violin(aes(color = Verb1)) -->
-
-<!-- ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point() -->
-
-
-<!-- ``` -->
-<!-- ```{r plotverbs, echo=FALSE} -->
-
-<!-- verb1 <- correctdata %>% group_by(Verb1) %>% summarise(m_onset = mean(Onset), std_onset = sd(Onset), SEM_onset = std.error(Onset), m_duration = mean(Offset - Onset), std_duration = sd(Offset-Onset), SEM_duration = std.error(Offset - Onset), m_offset = mean(Offset), std_offset = sd(Offset), SEM_offset = std.error(Offset)) -->
-
-
-<!-- ggplot(verb1, aes(x=Verb1, y=m_offset)) + geom_point(aes(color = Verb1)) -->
-
-<!-- ggplot(verb1, aes(x=Verb1, y=m_onset)) + geom_point(aes(color = Verb1)) -->
-
-<!-- ggplot(verb1, aes(x=Verb1, y=m_duration)) + geom_point(aes(color = Verb1)) -->
-
-<!-- ggplot(trials,aes(x=Trial, y = m_onset)) + geom_point() -->
-
-
-<!-- ``` -->
+```
